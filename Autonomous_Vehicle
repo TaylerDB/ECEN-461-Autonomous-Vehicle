@@ -1,0 +1,252 @@
+//Using the Adafruit library to move 4 DC motors 
+//in one direction on the DFRobot 4WD Mobile Platform
+ 
+//We need the Adafruit Library.
+//There are two versions, this was written for the first version of the library
+#include <AFMotor.h>
+#include <Servo.h> 
+
+// Global variable 
+bool left;
+bool right;
+bool center;
+long distance;
+long distanceFound;
+
+// create servo object to control a servo 
+Servo myservo;
+
+int pos = 0;    // variable to store the servo position
+
+// pin number for sensor's output, SERVO2 on shield
+const int pingPin = 9;
+
+// Setup Red LED to use pin 6
+const int ledPin = 6;
+
+// Create Motor objects and assign them to the correct motor termnials
+AF_DCMotor motor_Back_L(1);
+AF_DCMotor motor_Back_R(2);
+AF_DCMotor motor_Front_R(4);
+AF_DCMotor motor_Front_L(3);
+
+
+
+void setup() 
+{
+// initialize variable
+  left = false;
+  right = false;
+  center = true;
+  distance = 0;
+  distanceFound = 0;
+
+  // initialize serial communication:
+  Serial.begin(9600);
+
+  // attaches the servo on pin 3, SER1 on shield
+  myservo.attach(10);  
+  myservo.write(90);
+  
+  // initialize the LED pin as an output:
+  pinMode(ledPin, OUTPUT);
+  
+  //We can adjust the speed for the motors here
+  //the range is 0 to 255
+  motor_Front_R.setSpeed(200);
+  motor_Front_L.setSpeed(200);
+  motor_Back_R.setSpeed(200);
+  motor_Back_L.setSpeed(200);
+ 
+}
+
+
+
+void loop() 
+{
+   sensor();
+   
+
+  if (distance >= 6 && center == true)
+  {  
+     moveForward();
+  }
+  
+  else if (left == true && distance != distanceFound)
+  {
+     turnLeft();
+  }
+  
+ else if (right == true && distance != distanceFound)
+  {
+     turnRight();
+  }
+  else if (distance == distanceFound)
+  {
+      right = false;  
+      left = false;  
+      center = true;  
+  }
+  else
+  {
+    Stop();
+    distanceFound = 0;
+    servo();
+  }
+
+  
+
+}
+
+
+void sensor()
+{
+  // establish variables for duration of the ping, and the distance result
+  // in inches and centimeters:
+  long duration, inches, cm;
+
+  // The PING))) is triggered by a HIGH pulse of 2 or more microseconds.
+  // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+  pinMode(pingPin, OUTPUT);
+  digitalWrite(pingPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(pingPin, HIGH);
+  delayMicroseconds(5);
+  digitalWrite(pingPin, LOW);
+
+  // The same pin is used to read the signal from the PING))): a HIGH pulse
+  // whose duration is the time (in microseconds) from the sending of the ping
+  // to the reception of its echo off of an object.
+  pinMode(pingPin, INPUT);
+  duration = pulseIn(pingPin, HIGH);
+
+  // convert the time into a distance
+  inches = microsecondsToInches(duration);
+  cm = microsecondsToCentimeters(duration);
+
+
+  // Set up minimum distance to blink red LED
+  distance = inches;
+
+ // find longest distance
+  if (distance > distanceFound)
+  {
+    distanceFound = distance;
+    if (pos < 90)
+    {
+      left = true;  
+      right = false;  
+      center = false;  
+    }
+    else if (pos > 90)
+    {
+      right = true;  
+      left = false;  
+      center = false;  
+    }
+    else
+    {
+      right = false;  
+      left = false;  
+      center = true;  
+    }
+  }
+  
+  Serial.print(inches);
+  Serial.print("in, ");
+  Serial.print(cm);
+  Serial.print("cm, ");
+  Serial.print(distanceFound);
+  Serial.print("dF, ");
+  Serial.print(distance);
+  Serial.print("dis, ");
+  Serial.print(pos);
+  Serial.print("pos");
+  Serial.println();
+  
+  delay(50);
+}
+
+long microsecondsToInches(long microseconds) 
+{
+  // According to Parallax's datasheet for the PING))), there are 73.746
+  // microseconds per inch (i.e. sound travels at 1130 feet per second).
+  // This gives the distance travelled by the ping, outbound and return,
+  // so we divide by 2 to get the distance of the obstacle.
+  // See: http://www.parallax.com/dl/docs/prod/acc/28015-PING-v1.3.pdf
+  return microseconds / 74 / 2;
+}
+
+long microsecondsToCentimeters(long microseconds) 
+{
+  // The speed of sound is 340 m/s or 29 microseconds per centimeter.
+  // The ping travels out and back, so to find the distance of the object we
+  // take half of the distance travelled.
+  return microseconds / 29 / 2;
+}
+
+
+
+void servo()
+{
+  for (pos = 0; pos <= 180; pos += 1) 
+  { 
+    // goes from 0 degrees to 180 degrees
+    // in steps of 1 degree
+    myservo.write(pos);              // tell servo to go to position in variable 'pos'
+    delay(5);                       // waits 15ms for the servo to reach the position
+    sensor();
+  }
+
+  myservo.write(90); 
+  delay(20);
+  
+}
+
+
+void turnRight()
+{
+  //run each motor in the forward direction
+  motor_Front_R.run(BACKWARD);
+  motor_Back_R.run(BACKWARD);
+  motor_Back_L.run(FORWARD); 
+  motor_Front_L.run(FORWARD);
+  Serial.print("Right");
+  Serial.println();
+}
+  
+
+  void turnLeft()
+{
+  //run each motor in the forward direction
+  motor_Front_R.run(FORWARD);
+  motor_Back_R.run(FORWARD);
+  motor_Front_L.run(BACKWARD);
+  motor_Back_L.run(BACKWARD); 
+  Serial.print("Left");
+  Serial.println();
+
+}
+
+
+void Stop()
+{
+  //run each motor in the forward direction
+  motor_Front_R.run(RELEASE);
+  motor_Front_L.run(RELEASE);
+  motor_Back_R.run(RELEASE);
+  motor_Back_L.run(RELEASE); 
+}
+
+
+void moveForward()
+{
+  //run each motor in the forward direction
+  motor_Front_R.run(FORWARD);
+  motor_Front_L.run(FORWARD);
+  motor_Back_R.run(FORWARD);
+  motor_Back_L.run(FORWARD); 
+   Serial.print("Forward");
+  Serial.println();
+}
+
